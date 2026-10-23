@@ -1,0 +1,2 @@
+-- SQLite schema version 1 already includes the cancelled payment state.
+-- The previous MySQL ALTER TABLE migration is intentionally not executed here.

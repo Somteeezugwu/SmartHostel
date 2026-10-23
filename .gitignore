@@ -1,0 +1,13 @@
+.env
+.env.*
+!.env.example
+storage/*.sqlite
+storage/*.sqlite-*
+storage/*.db
+storage/*.db-*
+storage/*.bak
+storage/backups/
+storage/sessions/*
+storage/logs/*
+!storage/logs/.gitkeep
+vendor/
