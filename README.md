@@ -58,6 +58,29 @@ php tests/allocation_workflow.php
 
 The allocation workflow creates a separate temporary SQLite database and starts `reservation_worker.php` as part of its concurrency check. It checks reservation races, the 48-hour expiry, cancellation, payment review permissions, and allocation uniqueness. It does not reset or use the normal local database.
 
+Test the seed utility separately with:
+
+```powershell
+php tests/seed_test_users.php
+```
+
+This test creates and removes its own temporary database, verifies all 80 profiles and questionnaires, checks a repeated run creates no duplicates, verifies the shared password hash, compares compatibility scores, and confirms a pre-existing super-admin row remains.
+
+## Development test students
+
+The seed script adds 80 clearly labelled student accounts to the configured SQLite database. It is disabled unless **both** explicit opt-ins are set. Use this only with a local development or testing database:
+
+```powershell
+$env:APP_ENV = 'development'
+$env:ALLOW_TEST_USER_SEEDING = '1'
+php scripts/seed-test-users.php
+Remove-Item Env:ALLOW_TEST_USER_SEEDING
+```
+
+Accounts use `student001@test.smarthostel.local` through `student080@test.smarthostel.local`; every account shares the password `SmartHostelTest2026!`. These are fictional development accounts. Their profiles are marked eligible only to let the existing compatibility matcher run immediately. The script does not create school-fee verification records or payment evidence and does not change unrelated users. It reports created, already-present, and failed accounts and can be run again safely.
+
+Sign in at `/login.php` with, for example, `student001@test.smarthostel.local` and the shared password. Open Dashboard → Roommate matches. The profiles contain complete, varied answers using the existing six questionnaire fields. Students of the same gender and similar preference groups should rank more highly; other groups share some habits and differ on others. Matching still uses the existing weighted algorithm and eligibility rules.
+
 ## Security and operational notes
 
 State-changing API requests require the session CSRF token. User input is validated on the server and sent through prepared statements. Contact messages are length-limited, email-validated, protected by a honeypot and per-session submission delay, and escaped in the admin interface. Notifications are scoped to the signed-in user; marking one read checks ownership. The SQLite file is rejected if located under the public document root.
