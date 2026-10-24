@@ -16,7 +16,8 @@ function scalar(PDO $pdo,string $sql,array $args=[]):mixed{$q=$pdo->prepare($sql
 
 $tag='wf'.bin2hex(random_bytes(5));$ids=[];$hostelId=null;$roomId=null;
 try{
-    verify((int)$pdo->query('PRAGMA user_version')->fetchColumn()===1,'SQLite schema is automatically initialized at version 1');
+    verify((int)$pdo->query('PRAGMA user_version')->fetchColumn()===2,'SQLite schema is automatically initialized at version 2');
+    verify((int)$pdo->query("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='contact_messages'")->fetchColumn()===1,'contact messages table is present in the migrated schema');
     verify((int)$pdo->query('SELECT COUNT(*) FROM matching_weights')->fetchColumn()===6,'default matching weights are seeded exactly once');
     $admin=makeUser($pdo,$tag.'admin','super_admin');$ids[]=$admin;
     for($i=1;$i<=8;$i++)$ids[$i]=makeUser($pdo,$tag.'s'.$i);

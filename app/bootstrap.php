@@ -11,14 +11,15 @@ function sqlite_path(): string {
 }
 function initialize_sqlite(PDO $pdo): void {
     $version=(int)$pdo->query('PRAGMA user_version')->fetchColumn();
-    if($version>1)throw new RuntimeException('This database was created by a newer application version.');
-    if($version===1)return;
+    if($version>2)throw new RuntimeException('This database was created by a newer application version.');
+    if($version===2)return;
+    if($version===1){$migration=file_get_contents(dirname(__DIR__).'/database/migrations/003_contact_messages.sql');if($migration===false)throw new RuntimeException('Database migration is unavailable.');$pdo->exec('BEGIN IMMEDIATE');try{$pdo->exec($migration);$pdo->exec('PRAGMA user_version=2');$pdo->exec('COMMIT');}catch(Throwable $e){try{$pdo->exec('ROLLBACK');}catch(Throwable){}throw $e;}return;}
     $schema=file_get_contents(dirname(__DIR__).'/database/schema.sql');
     if($schema===false)throw new RuntimeException('SQLite schema is unavailable.');
     $pdo->exec('BEGIN IMMEDIATE');
     try {
         $version=(int)$pdo->query('PRAGMA user_version')->fetchColumn();
-        if($version===0){$pdo->exec($schema);$pdo->exec('PRAGMA user_version=1');}
+        if($version===0){$pdo->exec($schema);$pdo->exec('PRAGMA user_version=2');}
         if($pdo->inTransaction())$pdo->commit();else $pdo->exec('COMMIT');
     } catch(Throwable $e) {if($pdo->inTransaction())$pdo->rollBack();else try{$pdo->exec('ROLLBACK');}catch(Throwable){}throw $e;}
 }

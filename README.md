@@ -1,16 +1,23 @@
 # SmartHostel
 
-SmartHostel is a PHP 8.2 application for student accommodation, weighted roommate matching, hostel inventory, 48-hour reservations, payment evidence review, allocations, notifications, and CSV reports. The UI is native PHP/HTML/CSS/vanilla JavaScript. Its default local database is SQLite; there is no database server or Composer install needed.
+SmartHostel is a PHP 8.2+ student accommodation application using SQLite through PDO, semantic HTML, CSS, and vanilla JavaScript. It supports student profiles, eligibility review, weighted roommate compatibility, hostel inventory, 48-hour bed reservations, development-mode payment evidence review, allocations, notifications, audit logs, and CSV reports. The SQLite database remains in `storage/`, outside the public document root.
 
-## Run on Windows
+## Public site and application pages
 
-### 1. Install PHP
+The public homepage at `http://127.0.0.1:8000/` contains About SmartHostel, an eight-step How to Use guide, and a contact form. Contact submissions are validated and stored in SQLite; they are not emailed. Authorized administrators can search messages at Dashboard → Contact messages and mark them handled. No support email or phone is configured.
 
-If PHP is not already installed, download a current PHP 8.2+ Windows build from [windows.php.net/download](https://windows.php.net/download/). Extract it to a stable folder such as `C:\\php`. You do not need Apache or MySQL.
+- `/login.php` — sign in.
+- `/register.php` — create a student account.
+- `/dashboard.php` — authenticated role-based dashboard. Students see their accommodation journey and activities; admins see management and reporting; super admins also have eligibility, payment review, and audit access.
+- `/api.php?action=...` — existing JSON API and preserved workflows.
 
-Add that folder to your Windows `Path` (Settings → System → About → Advanced system settings → Environment Variables → select `Path` → Edit → New). Close and reopen VS Code or PowerShell after changing `Path`.
+Student dashboard activities include profile, lifestyle questionnaire, roommate matches, bed browsing, reservations, payment details, allocation, notifications, and account settings information. Admin activities include student records, hostel/room/bed management, reservation/allocation overview, contact message management, and CSV reports. Only `super_admin` can approve or reject school-fee and payment evidence. Payment evidence review is in development mode and is not real Remita verification.
 
-In a new VS Code terminal, confirm PHP is available:
+Protected pages redirect unauthenticated visitors to sign in. Server-side API authentication and authorization remain authoritative; hiding a dashboard link does not grant or remove a permission.
+
+## Run locally on Windows
+
+Install PHP 8.2+ and enable `pdo_sqlite`. No Apache, MySQL, XAMPP, Node, framework, or Composer install is required. Check the PHP extensions:
 
 ```powershell
 php -v
@@ -18,87 +25,41 @@ php -m
 php -r "print_r(PDO::getAvailableDrivers());"
 ```
 
-The driver list must include `sqlite`. If it does not, find the loaded configuration file with `php --ini`, open its `php.ini`, and enable `extension=pdo_sqlite` (and `extension=sqlite3` if present but commented). Make sure `extension_dir` points to PHP’s `ext` folder, then reopen the terminal and check again. The app needs PHP 8.2+ and `pdo_sqlite`; it does not require Composer.
-
-### 2. Configure and start
-
-Optionally copy `.env.example` to `.env` and change `SQLITE_DATABASE_PATH`. The default is `storage/smarthostel.sqlite`. Keep this file outside `public/` so the browser cannot fetch it. If you already have a `.env`, add or edit just the SQLite path; do not replace your other local settings.
-
-From the project folder, either double-click `start.bat` or run:
+From the project folder, start the built-in server:
 
 ```powershell
 php -S 127.0.0.1:8000 -t public
 ```
 
-Open [http://127.0.0.1:8000](http://127.0.0.1:8000). Leave the terminal running while using the portal; press Ctrl+C to stop it. On first request the app creates `storage/` and the SQLite database, then installs the schema and default matching weights. It records schema version 1 in SQLite and does not recreate or reset a database that has already been initialized.
+Then open `http://127.0.0.1:8000/`. `start.bat` starts the same server. On first request, the app creates `storage/smarthostel.sqlite` and initializes its schema. Existing database records are preserved. Optionally configure `SQLITE_DATABASE_PATH` in `.env` (copy `.env.example` if needed); keep the database outside `public/`.
 
-### 3. Create the first administrator
+## Create the first administrator securely
 
-Register a student through the portal if desired. To create the first administrator, open a second terminal in the project folder and run:
+The setup script creates the first administrator as a `super_admin`, prompts for a password, and refuses to create one if any administrator already exists. No default admin account is shipped.
 
 ```powershell
 php scripts/create-admin.php admin@example.edu.ng
 ```
 
-Enter a unique password of at least 12 characters. The command refuses to create another administrator after one exists. No default administrator or password is shipped.
+Use a unique password with at least 12 characters. Keep the terminal private while entering it.
 
-## SQLite files, backup, and reset
+## Database migrations and data safety
 
-The default database is `storage/smarthostel.sqlite`, outside the public document root. SQLite may also create `-wal` and `-shm` companion files while the app is running. To make a simple file backup, stop the PHP server first, then copy the database file:
-
-```powershell
-Copy-Item storage/smarthostel.sqlite storage/smarthostel-backup.sqlite
-```
-
-To restore, stop the server and copy the backup over `storage/smarthostel.sqlite`. To intentionally start with an empty local database, stop the server and remove the database and its sidecars:
-
-```powershell
-Remove-Item storage/smarthostel.sqlite -ErrorAction SilentlyContinue
-Remove-Item storage/smarthostel.sqlite-wal -ErrorAction SilentlyContinue
-Remove-Item storage/smarthostel.sqlite-shm -ErrorAction SilentlyContinue
-```
-
-The next request initializes a fresh database. This permanently removes local accounts and accommodation records, so back up first if you want to keep them.
-
-## Optional import from an existing MySQL database
-
-The app does not need MySQL after migration. If you already have data in the old MySQL database, keep that database intact and make a backup first. With the existing MySQL service still available, set the source connection variables in PowerShell and run the one-way importer. It will refuse to merge into a populated SQLite database, keeps record IDs, verifies foreign keys, and reports imported row counts; it never writes to MySQL.
-
-```powershell
-$env:MYSQL_DSN = 'mysql:host=127.0.0.1;dbname=smarthostel;charset=utf8mb4'
-$env:MYSQL_USER = 'root'
-$env:MYSQL_PASS = ''
-$env:SQLITE_DATABASE_PATH = 'storage/smarthostel.sqlite'
-php scripts/migrate-mysql-to-sqlite.php
-```
-
-This optional importer needs `pdo_mysql` only to read the old database. It does not need that driver for regular SmartHostel use. If there is no MySQL database containing data you need, omit this step and use the automatically initialized empty SQLite database.
+SQLite uses `PRAGMA user_version`. Version 2 adds `contact_messages` and its status/time index. Fresh databases receive the complete schema; a version 1 database applies `database/migrations/003_contact_messages.sql` transactionally on its next connection. No existing tables or records are deleted. Keep regular backups of the database and stop the local server before making a file copy. SQLite foreign keys remain enabled.
 
 ## Tests
 
-Run the checks from the project folder:
+Run the existing checks from the project folder:
 
 ```powershell
 php tests/compatibility.php
 php tests/allocation_workflow.php
 ```
 
-The workflow test creates a uniquely named temporary SQLite database, tests competing reservation processes, 48-hour expiry, bed release, cancellations, duplicate payment references, review permissions, and unique allocations, then removes its temporary files. It does not use your normal `storage/smarthostel.sqlite` database.
+The allocation workflow creates a separate temporary SQLite database and starts `reservation_worker.php` as part of its concurrency check. It checks reservation races, the 48-hour expiry, cancellation, payment review permissions, and allocation uniqueness. It does not reset or use the normal local database.
 
-## Troubleshooting
+## Security and operational notes
 
-- **`php` is not recognized:** add the PHP folder to Windows `Path`, then restart VS Code/PowerShell.
-- **PDO SQLite is unavailable:** enable `pdo_sqlite` in the `php.ini` shown by `php --ini`; check `php -m` and `PDO::getAvailableDrivers()` again.
-- **Database cannot be opened:** confirm the `SQLITE_DATABASE_PATH` parent folder is writable. Relative paths are resolved from the project directory. Close tools that may have the SQLite file locked and restart the server.
-- **Address already in use:** stop the other local PHP server or change port `8000` in `start.bat` and use the matching URL.
-- **Cannot create administrator:** the setup command allows this only when the database has no administrator. If an existing admin is unavailable, do not delete the database casually; use a deliberate local recovery procedure after backing it up.
+State-changing API requests require the session CSRF token. User input is validated on the server and sent through prepared statements. Contact messages are length-limited, email-validated, protected by a honeypot and per-session submission delay, and escaped in the admin interface. Notifications are scoped to the signed-in user; marking one read checks ownership. The SQLite file is rejected if located under the public document root.
 
-## Design and payment notes
-
-Compatibility scores are normalized as `100 × Σ(weight × similarity) / Σ(applicable weights)`. Schedule similarity uses circular minute distance to treat times near midnight as close; each 1–5 rating uses `1 − |difference| / 4`. Unanswered criteria are omitted from both numerator and denominator; no shared answers produce no score. The current configurable weights are sleep 20, study 20, cleanliness 20, noise tolerance 15, social style 15, guest frequency 10. Only eligible, gender-compatible students are compared.
-
-SQLite foreign keys are enabled on every connection. Write workflows use `BEGIN IMMEDIATE`, a busy timeout and retry, transactions, and partial unique indexes for active holds and confirmed allocations. This serializes competing SQLite writers while database constraints remain the final protection against duplicate allocations.
-
-Payment submission and review remain clearly marked development-mode evidence review. No Remita transaction is represented as externally verified. Real Remita verification needs approved institution merchant credentials, official integration documentation, and a server-side implementation that checks trusted transaction status, amount, currency, reference, and metadata.
-
-For production deployment, use HTTPS, protect the SQLite file and backups, configure secure cookies, make regular consistent backups, and review whether SQLite fits the institution’s expected concurrent workload. The built-in PHP server is for local development only; use a properly configured production web server for public deployment.
+Roommate compatibility continues to use the configured weighted criteria and existing eligibility rules. Reservation duration remains the existing 48 hours by default and can be set with `RESERVATION_HOURS`. Payment evidence is stored as development-mode manual review; the app does not claim to verify a Remita transaction. The built-in PHP server is intended for local development, not public production hosting.

@@ -1,4 +1,4 @@
--- SQLite schema, initialized through app/bootstrap.php (PRAGMA user_version = 1).
+-- SQLite schema, initialized through app/bootstrap.php (PRAGMA user_version = 2).
 CREATE TABLE users (
  id INTEGER PRIMARY KEY AUTOINCREMENT,
  email TEXT NOT NULL UNIQUE CHECK(length(email)<=190), password_hash TEXT NOT NULL,
@@ -94,3 +94,16 @@ CREATE INDEX ix_audit_time ON audit_logs(created_at);
 CREATE TRIGGER users_updated_at AFTER UPDATE ON users BEGIN UPDATE users SET updated_at=CURRENT_TIMESTAMP WHERE id=NEW.id; END;
 CREATE TRIGGER answers_updated_at AFTER UPDATE ON student_answers BEGIN UPDATE student_answers SET updated_at=CURRENT_TIMESTAMP WHERE user_id=NEW.user_id; END;
 CREATE TRIGGER reservations_updated_at AFTER UPDATE ON reservations BEGIN UPDATE reservations SET updated_at=CURRENT_TIMESTAMP WHERE id=NEW.id; END;
+CREATE TABLE contact_messages (
+ id INTEGER PRIMARY KEY AUTOINCREMENT,
+ name TEXT NOT NULL CHECK(length(name) BETWEEN 1 AND 120),
+ email TEXT NOT NULL CHECK(length(email)<=190),
+ subject TEXT NOT NULL CHECK(length(subject) BETWEEN 1 AND 180),
+ message TEXT NOT NULL CHECK(length(message) BETWEEN 1 AND 5000),
+ status TEXT NOT NULL DEFAULT 'new' CHECK(status IN ('new','handled')),
+ submitted_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+ handled_at TEXT,
+ handled_by INTEGER,
+ FOREIGN KEY(handled_by) REFERENCES users(id) ON DELETE SET NULL
+);
+CREATE INDEX ix_contact_status_time ON contact_messages(status,submitted_at);
