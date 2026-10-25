@@ -16,7 +16,25 @@ final class ReservationPaymentService {
     }
     private function now():DateTimeImmutable{$v=($this->clock)();if(!$v instanceof DateTimeImmutable)throw new RuntimeException('Clock must return a DateTimeImmutable.');return $v->setTimezone(new DateTimeZone('UTC'));}
 
+    /** Remita references commonly appear with optional display hyphens; normalize case and separators. */
+    public static function normalizeReference(string $rrr):string {
+        $rrr=strtoupper(trim($rrr));
+        if($rrr===''||!preg_match('/^[A-Z0-9\s-]+$/',$rrr))throw new RuntimeException('Enter an RRR using letters or numbers only.');
+        $rrr=preg_replace('/[\s-]+/','',$rrr)??'';
+        if(strlen($rrr)<4||strlen($rrr)>100)throw new RuntimeException('Enter an RRR between 4 and 100 characters.');
+        return $rrr;
+    }
+
+    public static function developmentReviewEnabled():bool {
+        return strtolower(envv('APP_ENV','production'))==='development'&&envv('ALLOW_DEVELOPMENT_PAYMENT_REVIEW','0')==='1';
+    }
+
+    private static function requireDevelopmentReview():void {
+        if(!self::developmentReviewEnabled())throw new RuntimeException('Development payment review is disabled. Configure APP_ENV=development and ALLOW_DEVELOPMENT_PAYMENT_REVIEW=1 locally.');
+    }
+
     public function submit(int $student,int $reservationId,string $rrr,string $amount):int {
+        self::requireDevelopmentReview();$rrr=self::normalizeReference($rrr);
         (new ReservationService($this->pdo,48,fn()=>$this->now()))->expire();
         $now=$this->now()->format('Y-m-d H:i:s');$lookup=$this->pdo->prepare('SELECT bed_space_id FROM reservations WHERE id=? AND student_user_id=?');$lookup->execute([$reservationId,$student]);$bed=$lookup->fetchColumn();if(!$bed)throw new RuntimeException('Reservation not found.');
         \begin_write($this->pdo);
@@ -29,6 +47,7 @@ final class ReservationPaymentService {
     }
 
     public function review(int $reviewer,int $paymentId,string $decision,string $note=''):void {
+        self::requireDevelopmentReview();
         if(!in_array($decision,['verified','rejected'],true))throw new RuntimeException('Invalid payment decision.');
         $role=$this->pdo->prepare("SELECT role FROM users WHERE id=?");$role->execute([$reviewer]);if($role->fetchColumn()!=='super_admin')throw new RuntimeException('Only a super administrator can review payments.');
         (new ReservationService($this->pdo,48,fn()=>$this->now()))->expire();

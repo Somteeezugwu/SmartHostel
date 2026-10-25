@@ -54,6 +54,7 @@ Run the existing checks from the project folder:
 ```powershell
 php tests/compatibility.php
 php tests/allocation_workflow.php
+php tests/bed_browsing_matching.php
 ```
 
 The allocation workflow creates a separate temporary SQLite database and starts `reservation_worker.php` as part of its concurrency check. It checks reservation races, the 48-hour expiry, cancellation, payment review permissions, and allocation uniqueness. It does not reset or use the normal local database.
@@ -86,3 +87,25 @@ Sign in at `/login.php` with, for example, `student001@test.smarthostel.local` a
 State-changing API requests require the session CSRF token. User input is validated on the server and sent through prepared statements. Contact messages are length-limited, email-validated, protected by a honeypot and per-session submission delay, and escaped in the admin interface. Notifications are scoped to the signed-in user; marking one read checks ownership. The SQLite file is rejected if located under the public document root.
 
 Roommate compatibility continues to use the configured weighted criteria and existing eligibility rules. Reservation duration remains the existing 48 hours by default and can be set with `RESERVATION_HOURS`. Payment evidence is stored as development-mode manual review; the app does not claim to verify a Remita transaction. The built-in PHP server is intended for local development, not public production hosting.
+
+## Bed browsing
+
+Students browse the live inventory in three steps: hostels with available beds, rooms in a selected hostel, then beds in a selected room. The availability queries exclude inactive inventory, active reservation holds, and confirmed allocations; they also apply the hostel's gender eligibility. Counts are calculated from the same availability rules on each request. The final reservation endpoint rechecks eligibility and availability inside a write transaction, so an out-of-date browser result cannot reserve a held or allocated bed. Room details are limited to the selected hostel and bed details are checked against both selected IDs.
+
+## RRR and reservation payment review
+
+The project has no Remita credentials, gateway adapter, or live status-verification integration. Its payment route stores evidence for a privileged manual decision; submitting an RRR never verifies payment. A pending record remains pending until a super administrator rejects it or manually approves it in the explicitly enabled local development workflow.
+
+The existing code accepted 4–100 characters and did not check whether an RRR existed with Remita. The updated reservation payment form/API normalizes references to uppercase alphanumeric characters by removing spaces and hyphens, then accepts 4–100 normalized characters. It rejects other characters and uses the database's global unique constraint to prevent reusing a reference. This range is the application's development-review validation, not a claimed official Remita format. Remita receipts show 12-digit references (sometimes grouped with hyphens), but this project has no provider integration to validate existence, status, amount, or transaction ownership. See the [Remita API status-check documentation](https://api.remita.net/) for the provider's RRR verification operation and required integration credentials.
+
+The original RRR error cannot be attributed to one specific submitted value because the report did not include the response, reservation ID/status, or server log entry. In this code, a random reference that meets the local character rule is not rejected for being nonexistent; likely rejection paths are a missing/expired/cancelled hold, unapproved eligibility, an already pending submission for that hold, or a reference already used elsewhere. The user-facing API errors identify those workflow conditions; unexpected database errors are logged without returning SQL details.
+
+Development review is disabled unless both `APP_ENV=development` and `ALLOW_DEVELOPMENT_PAYMENT_REVIEW=1` are set. `ALLOW_DEVELOPMENT_PAYMENT_REVIEW` defaults to `0`. For a local demonstration only, copy `.env.example` to `.env`, keep `APP_ENV=development`, and set the opt-in to `1`. A student submission demonstrates the pending outcome; a super administrator can choose reject or approve to demonstrate those outcomes. Approval is a manually simulated development decision, not proof that money was paid. Set `APP_ENV=production` and keep the opt-in at `0` in production. There is no live provider configuration to provide; a future real integration requires Remita-issued merchant credentials and an implementation based on its authenticated status response.
+
+## Roommate matching rules
+
+Matching is available before a reservation or allocation. The student must have approved school-fee eligibility and all six validated lifestyle answers: sleep time and study time (minutes after midnight, 0–1439), plus cleanliness, noise tolerance, social style, and guest frequency (integer ratings 1–5). Candidates must be other student accounts, approved eligible, the same gender under the existing pairing rule, and have all six valid answers. Candidates with incomplete questionnaires are excluded, and the empty state says whether no eligible peers exist or eligible peers have not completed the questionnaire.
+
+The actual score compares only those six preference fields. For sleep/study, similarity is `max(0, 1 - min(|x-y|,1440-|x-y|)/720)`; for 1–5 ratings, it is `1 - |x-y|/4`. Each factor's points equal similarity times its enabled database weight. The percentage is the rounded weighted-points sum divided by the sum of enabled weights that have valid shared answers, multiplied by 100. With no enabled shared weight, no score is returned. Results are ranked highest first and only the candidate's first name, academic level, score, and strongest preference factors are displayed. Booking status is not part of candidate filtering.
+
+The specific earlier “why no results” event cannot be traced without the active student's profile/questionnaire and API response. The code's previous endpoint required the current student's eligibility and returned eligible same-gender peers with any shared valid answer, but returned no reason when results were empty. The updated endpoint distinguishes pending eligibility, missing current answers, no eligible same-gender peers, incomplete peer questionnaires, and no scored candidates. Database failures now stay errors rather than being rendered as an empty match list.
