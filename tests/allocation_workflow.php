@@ -21,7 +21,8 @@ try{
     putenv('APP_ENV=development');verify(ReservationPaymentService::developmentReviewEnabled(),'development payment review requires the explicit local opt-in');
     verify(ReservationPaymentService::normalizeReference(' 1234-5678-9012 ')==='123456789012','RRR display separators normalize consistently');
     try{ReservationPaymentService::normalizeReference('not valid!');verify(false,'malformed RRR characters are rejected');}catch(RuntimeException){verify(true,'malformed RRR characters are rejected');}
-    verify((int)$pdo->query('PRAGMA user_version')->fetchColumn()===2,'SQLite schema is automatically initialized at version 2');
+    verify((int)$pdo->query('PRAGMA user_version')->fetchColumn()===4,'SQLite schema is automatically initialized at version 4');
+        verify((int)$pdo->query("SELECT COUNT(*) FROM sqlite_master WHERE type='index' AND name='uq_pending_room_switch_destination'")->fetchColumn()===1,'pending room-switch destinations have a database-level unique index');
     verify((int)$pdo->query("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='contact_messages'")->fetchColumn()===1,'contact messages table is present in the migrated schema');
     verify((int)$pdo->query('SELECT COUNT(*) FROM matching_weights')->fetchColumn()===6,'default matching weights are seeded exactly once');
     $admin=makeUser($pdo,$tag.'admin','super_admin');$ids[]=$admin;

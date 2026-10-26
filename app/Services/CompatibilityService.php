@@ -3,6 +3,7 @@ declare(strict_types=1);
 namespace SmartHostel\Services;
 final class CompatibilityService {
     public const WEIGHTS=['sleep_time'=>20,'study_time'=>20,'cleanliness'=>20,'noise_tolerance'=>15,'social_style'=>15,'guest_frequency'=>10];
+    public const LABELS=['sleep_time'=>'Sleep schedule','study_time'=>'Study schedule','cleanliness'=>'Cleanliness','noise_tolerance'=>'Noise tolerance','social_style'=>'Social style','guest_frequency'=>'Guest frequency'];
     private array $weights;
     public function __construct(?array $weights=null) {
         $this->weights=$weights??self::WEIGHTS;
@@ -11,13 +12,13 @@ final class CompatibilityService {
             $this->weights[$key]=(float)$weight;
         }
     }
-    /** Both students must be eligible. The default roommate rule pairs only the same gender. */
     public static function eligiblePair(array $a,array $b): bool {
         return ($a['eligibility']??null)==='eligible'
             && ($b['eligibility']??null)==='eligible'
             && isset($a['gender'],$b['gender'])
             && $a['gender']===$b['gender'];
     }
+    public static function criteriaLabels(): array { return self::LABELS; }
     public function compare(array $a,array $b): array {
         $sum=0.0; $weight=0.0; $factors=[];
         foreach($this->weights as $key=>$w) {

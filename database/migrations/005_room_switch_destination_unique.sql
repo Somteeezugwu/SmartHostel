@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX uq_pending_room_switch_destination ON room_switch_requests(to_bed_space_id) WHERE status='pending';

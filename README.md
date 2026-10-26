@@ -45,7 +45,7 @@ Use a unique password with at least 12 characters. Keep the terminal private whi
 
 ## Database migrations and data safety
 
-SQLite uses `PRAGMA user_version`. Version 2 adds `contact_messages` and its status/time index. Fresh databases receive the complete schema; a version 1 database applies `database/migrations/003_contact_messages.sql` transactionally on its next connection. No existing tables or records are deleted. Keep regular backups of the database and stop the local server before making a file copy. SQLite foreign keys remain enabled.
+SQLite uses `PRAGMA user_version`. Version 2 adds `contact_messages`; version 3 adds room-switch requests; version 4 prevents multiple pending switch requests for one destination bed. Fresh databases receive the complete schema, and existing databases apply the required migrations transactionally on connection. No existing tables or records are deleted. Keep regular backups of the database and stop the local server before making a file copy. SQLite foreign keys remain enabled.
 
 ## Tests
 
@@ -82,6 +82,16 @@ Accounts use `student001@test.smarthostel.local` through `student080@test.smarth
 
 Sign in at `/login.php` with, for example, `student001@test.smarthostel.local` and the shared password. Open Dashboard → Roommate matches. The profiles contain complete, varied answers using the existing six questionnaire fields. Students of the same gender and similar preference groups should rank more highly; other groups share some habits and differ on others. Matching still uses the existing weighted algorithm and eligibility rules.
 
+## Seed hostel rooms and assignments
+
+For an explicitly authorized local seed, run `scripts/seed-hostel-assignments.php` with `ALLOW_HOSTEL_ASSIGNMENT_SEEDING=1`. It requires exactly one active hostel, fills missing beds in active rooms, creates additional rooms using the existing room capacity, and assigns eligible students who have no confirmed allocation or active reservation hold. Assignments use confirmed reservations and allocations but do not create payment records. The operation is transactional and safe to rerun; keep the opt-in unset outside a deliberate seed operation.
+
+```powershell
+$env:ALLOW_HOSTEL_ASSIGNMENT_SEEDING = '1'
+php scripts/seed-hostel-assignments.php
+Remove-Item Env:ALLOW_HOSTEL_ASSIGNMENT_SEEDING
+```
+
 ## Security and operational notes
 
 State-changing API requests require the session CSRF token. User input is validated on the server and sent through prepared statements. Contact messages are length-limited, email-validated, protected by a honeypot and per-session submission delay, and escaped in the admin interface. Notifications are scoped to the signed-in user; marking one read checks ownership. The SQLite file is rejected if located under the public document root.
@@ -104,8 +114,10 @@ Development review is disabled unless both `APP_ENV=development` and `ALLOW_DEVE
 
 ## Roommate matching rules
 
-Matching is available before a reservation or allocation. The student must have approved school-fee eligibility and all six validated lifestyle answers: sleep time and study time (minutes after midnight, 0–1439), plus cleanliness, noise tolerance, social style, and guest frequency (integer ratings 1–5). Candidates must be other student accounts, approved eligible, the same gender under the existing pairing rule, and have all six valid answers. Candidates with incomplete questionnaires are excluded, and the empty state says whether no eligible peers exist or eligible peers have not completed the questionnaire.
+Matching does not require a reservation or allocation. The student must have approved school-fee eligibility and all six validated lifestyle answers: sleep time and study time (minutes after midnight, 0–1439), plus cleanliness, noise tolerance, social style, and guest frequency (integer ratings 1–5). Candidates must be other student accounts, approved eligible, the same gender under the existing pairing rule, and have all six valid answers. Candidates with incomplete questionnaires are excluded, and the empty state says whether no eligible peers exist or eligible peers have not completed the questionnaire.
 
-The actual score compares only those six preference fields. For sleep/study, similarity is `max(0, 1 - min(|x-y|,1440-|x-y|)/720)`; for 1–5 ratings, it is `1 - |x-y|/4`. Each factor's points equal similarity times its enabled database weight. The percentage is the rounded weighted-points sum divided by the sum of enabled weights that have valid shared answers, multiplied by 100. With no enabled shared weight, no score is returned. Results are ranked highest first and only the candidate's first name, academic level, score, and strongest preference factors are displayed. Booking status is not part of candidate filtering.
+The actual score compares only those six preference fields. For sleep/study, similarity is `max(0, 1 - min(|x-y|,1440-|x-y|)/720)`; for 1–5 ratings, it is `1 - |x-y|/4`. Each factor's points equal similarity times its enabled database weight. The percentage is the rounded weighted-points sum divided by the sum of enabled weights that have valid shared answers, multiplied by 100. With no enabled shared weight, no score is returned. All scored candidates are ranked highest first and can be filtered by name, faculty, department, or minimum score and sorted by score or name. Cards show the candidate's name, faculty/department, academic level, score, and each contributing preference factor. A room-switch action appears only for allocated students when a compatible candidate's active room has an available bed. Booking status is not part of candidate filtering.
+
+Students with confirmed allocations can request a switch into an available bed in a compatible student's current active room. Both students must remain eligible, satisfy the existing same-gender rule, have complete compatible questionnaires, and pass destination-hostel rules. Requests remain pending until an administrator approves or rejects them; the requester can cancel while pending, and both participants can view the request status. Approval rechecks current allocations and bed availability inside a write transaction, releases the old reservation/allocation, and creates the new confirmed allocation. A unique partial index prevents multiple pending requests for one destination bed.
 
 The specific earlier “why no results” event cannot be traced without the active student's profile/questionnaire and API response. The code's previous endpoint required the current student's eligibility and returned eligible same-gender peers with any shared valid answer, but returned no reason when results were empty. The updated endpoint distinguishes pending eligibility, missing current answers, no eligible same-gender peers, incomplete peer questionnaires, and no scored candidates. Database failures now stay errors rather than being rendered as an empty match list.
